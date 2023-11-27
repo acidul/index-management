@@ -37,4 +37,11 @@ class TransformContext(
     companion object {
         private const val LOCK_BUFFER_SECONDS = 60
     }
+
+    private var docAsUpsert: Boolean = false
+
+    fun isTransformDocAsUpsert() = docAsUpsert
+    fun setTransformDocAsUpsert(docAsUpsert: Boolean) {
+        this.docAsUpsert = docAsUpsert
+    }
 }

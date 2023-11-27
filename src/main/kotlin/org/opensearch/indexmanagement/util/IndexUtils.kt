@@ -80,6 +80,9 @@ class IndexUtils {
             return DEFAULT_SCHEMA_VERSION
         }
 
+        // Offset to manage patches in opendistro-ism-config Schema
+        const val SCHEMA_VERSION_PATCH_OFFSET = 1000L
+
         fun shouldUpdateIndex(index: IndexMetadata?, newVersion: Long): Boolean {
             var oldVersion = DEFAULT_SCHEMA_VERSION
 
@@ -90,7 +93,11 @@ class IndexUtils {
                     oldVersion = (metaData[SCHEMA_VERSION] as Int).toLong()
                 }
             }
-            return newVersion > oldVersion
+
+            // Two conditions to update the index
+            // - newVersion > oldVersion (legacy condition)
+            // - or oldVersion was a patched one and newVersion is not...
+            return (newVersion > oldVersion) || (oldVersion > SCHEMA_VERSION_PATCH_OFFSET && newVersion < SCHEMA_VERSION_PATCH_OFFSET)
         }
 
         fun checkAndUpdateConfigIndexMapping(

@@ -143,6 +143,7 @@ class TransportIndexTransformAction @Inject constructor(
             val modified = mutableListOf<String>()
             if (transform.sourceIndex != newTransform.sourceIndex) modified.add(Transform.SOURCE_INDEX_FIELD)
             if (transform.targetIndex != newTransform.targetIndex) modified.add(Transform.TARGET_INDEX_FIELD)
+            if (transform.docAsUpsert != newTransform.docAsUpsert) modified.add(Transform.DOC_AS_UPSERT_FIELD)
             if (transform.dataSelectionQuery != newTransform.dataSelectionQuery) modified.add(Transform.DATA_SELECTION_QUERY_FIELD)
             if (transform.groups != newTransform.groups) modified.add(Transform.GROUPS_FIELD)
             if (transform.aggregations != newTransform.aggregations) modified.add(Transform.AGGREGATIONS_FIELD)

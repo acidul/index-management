@@ -1,6 +1,6 @@
 {
   "_meta" : {
-    "schema_version": 19
+    "schema_version": 1019
   },
   "dynamic": "strict",
   "properties": {
@@ -1169,6 +1169,9 @@
               "ignore_above": 256
             }
           }
+        },
+        "doc_as_upsert": {
+          "type": "boolean"
         },
         "page_size": {
           "type": "long"

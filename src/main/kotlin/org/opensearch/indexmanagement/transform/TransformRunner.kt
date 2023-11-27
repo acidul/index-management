@@ -112,6 +112,7 @@ object TransformRunner :
         val transformContext = TransformContext(
             TransformLockManager(transform, context)
         )
+        transformContext.setTransformDocAsUpsert(transform.docAsUpsert)
 
         // Acquires the lock if there is no running job execution for the given transform; Lock is acquired per transform
         val transformLockManager = transformContext.transformLockManager

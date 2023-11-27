@@ -65,6 +65,7 @@ data class Transform(
     val sourceIndex: String,
     val dataSelectionQuery: QueryBuilder = MatchAllQueryBuilder(),
     val targetIndex: String,
+    val docAsUpsert: Boolean = false,
     @Deprecated("Will be ignored, to check the roles use user field") val roles: List<String> = emptyList(),
     val pageSize: Int,
     val groups: List<Dimension>,
@@ -120,6 +121,7 @@ data class Transform(
             .field(SOURCE_INDEX_FIELD, sourceIndex)
             .field(DATA_SELECTION_QUERY_FIELD, dataSelectionQuery)
             .field(TARGET_INDEX_FIELD, targetIndex)
+            .field(DOC_AS_UPSERT_FIELD, docAsUpsert)
             .field(PAGE_SIZE_FIELD, pageSize)
             .field(GROUPS_FIELD, groups.toTypedArray())
             .field(AGGREGATIONS_FIELD, aggregations)
@@ -149,6 +151,7 @@ data class Transform(
         out.writeString(sourceIndex)
         out.writeOptionalNamedWriteable(dataSelectionQuery)
         out.writeString(targetIndex)
+        out.writeBoolean(docAsUpsert)
         out.writeStringArray(emptyList<String>().toTypedArray())
         out.writeInt(pageSize)
         out.writeVInt(groups.size)
@@ -236,6 +239,7 @@ data class Transform(
         sourceIndex = sin.readString(),
         dataSelectionQuery = requireNotNull(sin.readOptionalNamedWriteable(QueryBuilder::class.java)) { "Query cannot be null" },
         targetIndex = sin.readString(),
+        docAsUpsert = sin.readBoolean(),
         roles = sin.readStringArray().toList(),
         pageSize = sin.readInt(),
         groups = sin.let {
@@ -274,6 +278,7 @@ data class Transform(
         const val ENABLED_AT_FIELD = "enabled_at"
         const val SOURCE_INDEX_FIELD = "source_index"
         const val TARGET_INDEX_FIELD = "target_index"
+        const val DOC_AS_UPSERT_FIELD = "doc_as_upsert"
         const val DESCRIPTION_FIELD = "description"
         const val DATA_SELECTION_QUERY_FIELD = "data_selection_query"
         const val METADATA_ID_FIELD = "metadata_id"
@@ -312,6 +317,7 @@ data class Transform(
             var sourceIndex: String? = null
             var dataSelectionQuery: QueryBuilder = MatchAllQueryBuilder()
             var targetIndex: String? = null
+            var docAsUpsert = false
             var metadataId: String? = null
             var pageSize: Int? = null
             val groups = mutableListOf<Dimension>()
@@ -348,6 +354,7 @@ data class Transform(
                         dataSelectionQuery = AbstractQueryBuilder.parseInnerQueryBuilder(sourceParser)
                     }
                     TARGET_INDEX_FIELD -> targetIndex = xcp.text()
+                    DOC_AS_UPSERT_FIELD -> docAsUpsert = xcp.booleanValue()
                     METADATA_ID_FIELD -> metadataId = xcp.textOrNull()
                     ROLES_FIELD -> {
                         // Parsing but not storing the field, deprecated
@@ -405,6 +412,7 @@ data class Transform(
                 sourceIndex = requireNotNull(sourceIndex) { "Transform source index is null" },
                 dataSelectionQuery = dataSelectionQuery,
                 targetIndex = requireNotNull(targetIndex) { "Transform target index is null" },
+                docAsUpsert = docAsUpsert,
                 pageSize = requireNotNull(pageSize) { "Transform page size is null" },
                 groups = groups,
                 aggregations = aggregations,

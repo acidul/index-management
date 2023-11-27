@@ -16,6 +16,8 @@ import org.opensearch.action.bulk.BulkItemResponse
 import org.opensearch.action.bulk.BulkRequest
 import org.opensearch.action.bulk.BulkResponse
 import org.opensearch.action.index.IndexRequest
+import org.opensearch.action.update.UpdateResponse
+import org.opensearch.action.update.UpdateRequest
 import org.opensearch.client.Client
 import org.opensearch.cluster.service.ClusterService
 import org.opensearch.common.settings.Settings
@@ -65,40 +67,60 @@ class TransformIndexer(
         }
     }
 
-    @Suppress("ThrowsCount", "RethrowCaughtException")
+    @Suppress("ThrowsCount", "RethrowCaughtException", "LongMethod")
     suspend fun index(transformTargetIndex: String, docsToIndex: List<DocWriteRequest<*>>, transformContext: TransformContext): Long {
         var updatableDocsToIndex = docsToIndex
         var indexTimeInMillis = 0L
-        val nonRetryableFailures = mutableListOf<BulkItemResponse>()
         try {
             if (updatableDocsToIndex.isNotEmpty()) {
                 val targetIndex = updatableDocsToIndex.first().index()
                 logger.debug("Attempting to index ${updatableDocsToIndex.size} documents to $targetIndex")
 
-                createTargetIndex(transformTargetIndex, transformContext.getTargetIndexDateFieldMappings())
+                if (false) {
+                    createTargetIndex(transformTargetIndex, transformContext.getTargetIndexDateFieldMappings())
+                }
                 backoffPolicy.retry(logger, listOf(RestStatus.TOO_MANY_REQUESTS)) {
-                    val bulkRequest = BulkRequest().add(updatableDocsToIndex)
-                    val bulkResponse: BulkResponse = client.suspendUntil { bulk(bulkRequest, it) }
-                    indexTimeInMillis += bulkResponse.took.millis
-                    val retryableFailures = mutableListOf<BulkItemResponse>()
-                    (bulkResponse.items ?: arrayOf()).filter { it.isFailed }.forEach { failedResponse ->
-                        if (failedResponse.status() == RestStatus.TOO_MANY_REQUESTS) {
-                            retryableFailures.add(failedResponse)
-                        } else {
-                            nonRetryableFailures.add(failedResponse)
+                    if (transformContext.isTransformDocAsUpsert()) {
+                        val nonRetryableFailures = mutableListOf<UpdateResponse>()
+                        for (doc in updatableDocsToIndex) {
+                            if (doc is IndexRequest) {
+                                var updateDoc: UpdateRequest = UpdateRequest(doc.index(), doc.id()).doc(doc).upsert(doc)
+                                val updateResponse: UpdateResponse = client.suspendUntil { update(updateDoc, it) }
+                                indexTimeInMillis += it.millis()
+                                if (updateResponse.shardInfo.failed > 0) {
+                                    nonRetryableFailures.add(updateResponse)
+                                }
+                            }
+                        }
+                        if (nonRetryableFailures.isNotEmpty()) {
+                            logger.error("Failed to index ${nonRetryableFailures.size} documents")
+                            throw TransformIndexException("Failed to index the documents: " + nonRetryableFailures.first().toString())
+                        }
+                    } else {
+                        val nonRetryableFailures = mutableListOf<BulkItemResponse>()
+                        val bulkRequest = BulkRequest().add(updatableDocsToIndex)
+                        val bulkResponse: BulkResponse = client.suspendUntil { bulk(bulkRequest, it) }
+                        indexTimeInMillis += bulkResponse.took.millis
+                        val retryableFailures = mutableListOf<BulkItemResponse>()
+                        (bulkResponse.items ?: arrayOf()).filter { it.isFailed }.forEach { failedResponse ->
+                            if (failedResponse.status() == RestStatus.TOO_MANY_REQUESTS) {
+                                retryableFailures.add(failedResponse)
+                            } else {
+                                nonRetryableFailures.add(failedResponse)
+                            }
+                        }
+                        updatableDocsToIndex = retryableFailures.map { failure ->
+                            updatableDocsToIndex[failure.itemId] as IndexRequest
+                        }
+                        if (updatableDocsToIndex.isNotEmpty()) {
+                            throw ExceptionsHelper.convertToOpenSearchException(retryableFailures.first().failure.cause)
+                        }
+                        if (nonRetryableFailures.isNotEmpty()) {
+                            logger.error("Failed to index ${nonRetryableFailures.size} documents")
+                            throw ExceptionsHelper.convertToOpenSearchException(nonRetryableFailures.first().failure.cause)
                         }
                     }
-                    updatableDocsToIndex = retryableFailures.map { failure ->
-                        updatableDocsToIndex[failure.itemId] as IndexRequest
-                    }
-                    if (updatableDocsToIndex.isNotEmpty()) {
-                        throw ExceptionsHelper.convertToOpenSearchException(retryableFailures.first().failure.cause)
-                    }
                 }
-            }
-            if (nonRetryableFailures.isNotEmpty()) {
-                logger.error("Failed to index ${nonRetryableFailures.size} documents")
-                throw ExceptionsHelper.convertToOpenSearchException(nonRetryableFailures.first().failure.cause)
             }
             return indexTimeInMillis
         } catch (e: TransformIndexException) {
